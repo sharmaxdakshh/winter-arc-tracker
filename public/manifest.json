@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "Winter Arc 90-Day Challenge",
+  "short_name": "Winter Arc",
+  "description": "90-day tracker for Studies, Competitive Exams, Mathematics and Fitness. Build discipline with daily tasks, progress reports and planning.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0B0F19",
+  "theme_color": "#4F46E5",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
