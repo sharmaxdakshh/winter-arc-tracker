@@ -5,4 +5,5 @@ export type Task = {
   phase: "Control" | "Capacity" | "Proof";
   description: string;
   badDayMinimum: "Yes" | "No";
+  focus: "Study" | "Fitness";
 };
