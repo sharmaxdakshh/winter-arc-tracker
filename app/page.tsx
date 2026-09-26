@@ -34,10 +34,12 @@ export default function Home() {
   const [badDayMode, setBadDayMode] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstall, setShowInstall] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Load data
+  // Load saved data
   useEffect(() => {
     const savedUser = localStorage.getItem("winter-arc-user");
     if (savedUser) {
@@ -62,6 +64,25 @@ export default function Home() {
     }
   }, []);
 
+  // Install prompt listener
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstall(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      setShowInstall(false);
+    }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+    };
+  }, []);
+
   // Intro → Login
   useEffect(() => {
     if (step === "intro") {
@@ -70,7 +91,7 @@ export default function Home() {
     }
   }, [step]);
 
-  // Save
+  // Save progress
   useEffect(() => {
     localStorage.setItem("winter-arc-data", JSON.stringify(completedData));
   }, [completedData]);
@@ -104,6 +125,23 @@ export default function Home() {
     setStep("login");
   };
 
+  const handleInstall = async () => {
+    if (!deferredPrompt) {
+      alert(
+        "Install ke liye:\n\nAndroid Chrome: Menu → Install app / Add to Home screen\n\niPhone Safari: Share button → Add to Home Screen"
+      );
+      return;
+    }
+
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === "accepted") {
+      setShowInstall(false);
+    }
+    setDeferredPrompt(null);
+  };
+
   const todayCompleted = completedData[today] || [];
   const todayPlan = planData[today] || [];
 
@@ -135,14 +173,14 @@ export default function Home() {
 
   const requestNotification = async () => {
     if (typeof Notification === "undefined") {
-      alert("Notifications is browser mein support nahi karti");
+      alert("Ye browser notifications support nahi karta");
       return;
     }
     const permission = await Notification.requestPermission();
     setNotifPermission(permission);
     if (permission === "granted") {
       new Notification("Winter Arc", {
-        body: "Notifications on! Har din discipline yaad dilaunga.",
+        body: "Notifications on! Discipline yaad dilata rahunga.",
         icon: "/icon-192.png",
       });
     }
@@ -173,8 +211,11 @@ export default function Home() {
   }
 
   const totalTasks = filteredTasks.length;
-  const completedCount = filteredTasks.filter((t) => todayCompleted.includes(t.id)).length;
-  const progress = totalTasks === 0 ? 0 : Math.round((completedCount / totalTasks) * 100);
+  const completedCount = filteredTasks.filter((t) =>
+    todayCompleted.includes(t.id)
+  ).length;
+  const progress =
+    totalTasks === 0 ? 0 : Math.round((completedCount / totalTasks) * 100);
 
   const getDateRange = (days: number) => {
     const dates: string[] = [];
@@ -191,14 +232,17 @@ export default function Home() {
     let totalCompleted = 0;
     dates.forEach((date) => {
       const dayCompleted = completedData[date] || [];
-      totalPossible += tasks.filter((t) =>
+      const relevantTasks = tasks.filter((t) =>
         focus === "Both" ? true : t.focus === focus
-      ).length;
+      );
+      totalPossible += relevantTasks.length;
       totalCompleted += dayCompleted.filter((id) =>
-        tasks.some((t) => t.id === id && (focus === "Both" || t.focus === focus))
+        relevantTasks.some((t) => t.id === id)
       ).length;
     });
-    return totalPossible === 0 ? 0 : Math.round((totalCompleted / totalPossible) * 100);
+    return totalPossible === 0
+      ? 0
+      : Math.round((totalCompleted / totalPossible) * 100);
   };
 
   const weeklyProgress = calculateAverage(getDateRange(7));
@@ -207,7 +251,10 @@ export default function Home() {
   // ====================== INTRO ======================
   if (step === "intro") {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center" style={{ backgroundColor: "#0B0F19" }}>
+      <main
+        className="min-h-screen flex flex-col items-center justify-center"
+        style={{ backgroundColor: "#0B0F19" }}
+      >
         <div className="text-center px-6">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-medium tracking-[0.2em] uppercase mb-8">
             90-Day Challenge
@@ -247,10 +294,15 @@ export default function Home() {
             <p className="text-slate-400">Login to begin your journey</p>
           </div>
 
-          <form onSubmit={handleLogin} className="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-xl">
+          <form
+            onSubmit={handleLogin}
+            className="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-xl"
+          >
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Your Name</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  Your Name
+                </label>
                 <input
                   type="text"
                   value={name}
@@ -261,7 +313,9 @@ export default function Home() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Email or Phone</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  Email or Phone
+                </label>
                 <input
                   type="text"
                   value={contact}
@@ -303,18 +357,28 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Install Button */}
+            <button
+              onClick={handleInstall}
+              className="px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-sm font-medium shadow-md shadow-indigo-500/25"
+            >
+              ⬇️ Install App
+            </button>
+
             <button
               onClick={sendTestNotification}
               className="px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900 text-sm font-medium"
             >
               🔔 Notify
             </button>
+
             <button
               onClick={() => setDarkMode(!darkMode)}
               className="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm"
             >
               {darkMode ? "☀️" : "🌙"}
             </button>
+
             <button
               onClick={handleLogout}
               className="px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 text-sm font-medium"
@@ -349,18 +413,24 @@ export default function Home() {
           </div>
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800">
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">This Week</p>
-            <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">{weeklyProgress}%</p>
+            <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+              {weeklyProgress}%
+            </p>
           </div>
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800">
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">This Month</p>
-            <p className="text-3xl font-bold text-violet-600 dark:text-violet-400">{monthlyProgress}%</p>
+            <p className="text-3xl font-bold text-violet-600 dark:text-violet-400">
+              {monthlyProgress}%
+            </p>
           </div>
         </div>
 
         {/* Progress Bar */}
         <div className="mb-6 bg-white/80 dark:bg-slate-900/80 rounded-2xl p-5 border border-slate-200 dark:border-slate-800">
           <div className="flex justify-between items-end mb-2">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Today&apos;s Progress</p>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+              Today&apos;s Progress
+            </p>
             <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 text-transparent bg-clip-text">
               {progress}%
             </span>
@@ -373,7 +443,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Daily Planning Box */}
+        {/* Daily Planning */}
         <div className="mb-8 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
             📝 Daily Planning
@@ -461,7 +531,9 @@ export default function Home() {
         </div>
 
         {filteredTasks.length === 0 && (
-          <p className="text-center text-slate-400 py-16">Is filter pe koi task nahi mila.</p>
+          <p className="text-center text-slate-400 py-16">
+            Is filter pe koi task nahi mila.
+          </p>
         )}
       </div>
     </main>
