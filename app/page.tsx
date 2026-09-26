@@ -35,11 +35,9 @@ export default function Home() {
   const [darkMode, setDarkMode] = useState(false);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstall, setShowInstall] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Load saved data
   useEffect(() => {
     const savedUser = localStorage.getItem("winter-arc-user");
     if (savedUser) {
@@ -64,26 +62,15 @@ export default function Home() {
     }
   }, []);
 
-  // Install prompt listener
   useEffect(() => {
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowInstall(true);
     };
-
     window.addEventListener("beforeinstallprompt", handler);
-
-    if (window.matchMedia("(display-mode: standalone)").matches) {
-      setShowInstall(false);
-    }
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-    };
+    return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
-  // Intro → Login
   useEffect(() => {
     if (step === "intro") {
       const timer = setTimeout(() => setStep("login"), 2200);
@@ -91,7 +78,6 @@ export default function Home() {
     }
   }, [step]);
 
-  // Save progress
   useEffect(() => {
     localStorage.setItem("winter-arc-data", JSON.stringify(completedData));
   }, [completedData]);
@@ -128,18 +114,13 @@ export default function Home() {
   const handleInstall = async () => {
     if (!deferredPrompt) {
       alert(
-        "Install ke liye:\n\nAndroid Chrome: Menu → Install app / Add to Home screen\n\niPhone Safari: Share button → Add to Home Screen"
+        "PWA install is browser mein available nahi.\n\nAndroid: neeche Download APK use karo\n\niPhone: Share → Add to Home Screen"
       );
       return;
     }
-
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-
-    if (outcome === "accepted") {
-      setShowInstall(false);
-    }
-    setDeferredPrompt(null);
+    if (outcome === "accepted") setDeferredPrompt(null);
   };
 
   const todayCompleted = completedData[today] || [];
@@ -197,25 +178,14 @@ export default function Home() {
     }
   };
 
-  // Filter tasks
   let filteredTasks = tasks;
-
-  if (focus !== "Both") {
-    filteredTasks = filteredTasks.filter((t) => t.focus === focus);
-  }
-  if (filter !== "All") {
-    filteredTasks = filteredTasks.filter((t) => t.phase === filter);
-  }
-  if (badDayMode) {
-    filteredTasks = filteredTasks.filter((t) => t.badDayMinimum === "Yes");
-  }
+  if (focus !== "Both") filteredTasks = filteredTasks.filter((t) => t.focus === focus);
+  if (filter !== "All") filteredTasks = filteredTasks.filter((t) => t.phase === filter);
+  if (badDayMode) filteredTasks = filteredTasks.filter((t) => t.badDayMinimum === "Yes");
 
   const totalTasks = filteredTasks.length;
-  const completedCount = filteredTasks.filter((t) =>
-    todayCompleted.includes(t.id)
-  ).length;
-  const progress =
-    totalTasks === 0 ? 0 : Math.round((completedCount / totalTasks) * 100);
+  const completedCount = filteredTasks.filter((t) => todayCompleted.includes(t.id)).length;
+  const progress = totalTasks === 0 ? 0 : Math.round((completedCount / totalTasks) * 100);
 
   const getDateRange = (days: number) => {
     const dates: string[] = [];
@@ -240,21 +210,16 @@ export default function Home() {
         relevantTasks.some((t) => t.id === id)
       ).length;
     });
-    return totalPossible === 0
-      ? 0
-      : Math.round((totalCompleted / totalPossible) * 100);
+    return totalPossible === 0 ? 0 : Math.round((totalCompleted / totalPossible) * 100);
   };
 
   const weeklyProgress = calculateAverage(getDateRange(7));
   const monthlyProgress = calculateAverage(getDateRange(30));
 
-  // ====================== INTRO ======================
+  // INTRO
   if (step === "intro") {
     return (
-      <main
-        className="min-h-screen flex flex-col items-center justify-center"
-        style={{ backgroundColor: "#0B0F19" }}
-      >
+      <main className="min-h-screen flex flex-col items-center justify-center" style={{ backgroundColor: "#0B0F19" }}>
         <div className="text-center px-6">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-medium tracking-[0.2em] uppercase mb-8">
             90-Day Challenge
@@ -276,7 +241,7 @@ export default function Home() {
     );
   }
 
-  // ====================== LOGIN ======================
+  // LOGIN
   if (step === "login") {
     return (
       <main className="min-h-screen flex items-center justify-center bg-[#0B0F19] px-4">
@@ -294,15 +259,10 @@ export default function Home() {
             <p className="text-slate-400">Login to begin your journey</p>
           </div>
 
-          <form
-            onSubmit={handleLogin}
-            className="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-xl"
-          >
+          <form onSubmit={handleLogin} className="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-xl">
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  Your Name
-                </label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Your Name</label>
                 <input
                   type="text"
                   value={name}
@@ -313,9 +273,7 @@ export default function Home() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  Email or Phone
-                </label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Email or Phone</label>
                 <input
                   type="text"
                   value={contact}
@@ -338,7 +296,7 @@ export default function Home() {
     );
   }
 
-  // ====================== MAIN APP ======================
+  // MAIN APP
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-950 dark:to-indigo-950/20 transition-colors">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
@@ -357,12 +315,21 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Install Button */}
+            {/* Download APK */}
+            <a
+              href="/winter-arc.apk"
+              download="Winter-Arc.apk"
+              className="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-medium shadow-md shadow-emerald-500/25"
+            >
+              ⬇️ Download APK
+            </a>
+
+            {/* PWA Install */}
             <button
               onClick={handleInstall}
               className="px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-sm font-medium shadow-md shadow-indigo-500/25"
             >
-              ⬇️ Install App
+              📲 Install App
             </button>
 
             <button
@@ -413,24 +380,18 @@ export default function Home() {
           </div>
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800">
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">This Week</p>
-            <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
-              {weeklyProgress}%
-            </p>
+            <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">{weeklyProgress}%</p>
           </div>
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800">
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">This Month</p>
-            <p className="text-3xl font-bold text-violet-600 dark:text-violet-400">
-              {monthlyProgress}%
-            </p>
+            <p className="text-3xl font-bold text-violet-600 dark:text-violet-400">{monthlyProgress}%</p>
           </div>
         </div>
 
         {/* Progress Bar */}
         <div className="mb-6 bg-white/80 dark:bg-slate-900/80 rounded-2xl p-5 border border-slate-200 dark:border-slate-800">
           <div className="flex justify-between items-end mb-2">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-              Today&apos;s Progress
-            </p>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Today&apos;s Progress</p>
             <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 text-transparent bg-clip-text">
               {progress}%
             </span>
@@ -445,13 +406,10 @@ export default function Home() {
 
         {/* Daily Planning */}
         <div className="mb-8 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-            📝 Daily Planning
-          </h2>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">📝 Daily Planning</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
             Kal ki planning / aaj ke extra goals yahan likho
           </p>
-
           <div className="flex gap-2 mb-4">
             <input
               type="text"
@@ -468,7 +426,6 @@ export default function Home() {
               Add
             </button>
           </div>
-
           {todayPlan.length === 0 ? (
             <p className="text-sm text-slate-400">Abhi koi plan nahi. Upar se add karo.</p>
           ) : (
@@ -491,7 +448,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* Phase Filters */}
+        {/* Filters */}
         <div className="flex flex-wrap gap-2 mb-8">
           {(["All", "Control", "Capacity", "Proof"] as FilterType[]).map((f) => (
             <button
@@ -531,9 +488,7 @@ export default function Home() {
         </div>
 
         {filteredTasks.length === 0 && (
-          <p className="text-center text-slate-400 py-16">
-            Is filter pe koi task nahi mila.
-          </p>
+          <p className="text-center text-slate-400 py-16">Is filter pe koi task nahi mila.</p>
         )}
       </div>
     </main>
