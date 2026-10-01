@@ -119,3 +119,14 @@ button:focus-visible {
   background-size: 200% 100%;
   animation: shine 2.5s linear infinite;
 }
+
+/* Card press feel */
+@keyframes task-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
+.task-pop {
+  animation: task-pop 0.35s ease;
+}
