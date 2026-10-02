@@ -13,6 +13,8 @@ type User = { name: string; contact: string };
 type CustomTask = { id: number; title: string };
 type Mood = "great" | "ok" | "low" | "";
 type Friend = { code: string; name: string; xp: number; streak: number };
+type Lang = "en" | "hi";
+type Skin = "midnight" | "forest" | "sunset" | "ocean";
 
 const QUOTES = [
   "Discipline is choosing what you want most over what you want now.",
@@ -22,6 +24,72 @@ const QUOTES = [
   "One focused block at a time.",
   "Consistency compounds. Excuses don't.",
 ];
+
+const i18n = {
+  en: {
+    welcome: "Welcome",
+    day: "Day",
+    phase: "Phase",
+    share: "Share",
+    logout: "Logout",
+    study: "Study",
+    fitness: "Fitness",
+    both: "Both",
+    badDay: "Bad Day",
+    autoPhase: "Auto Phase",
+    recovery: "Recovery mode: yesterday missed. Showing minimum tasks.",
+    nonNeg: "Non-negotiables",
+    contract: "My Contract",
+    milestones: "Milestones",
+    resetArc: "New 90-Day Arc",
+    language: "Language",
+    theme: "Theme",
+    tourNext: "Next",
+    tourSkip: "Skip tour",
+    eveningReview: "Evening review: 2 minutes — what went well today?",
+    smartMiss: "You slipped yesterday. Today: minimum tasks only. Still counts.",
+    smartStreak: "Streak is alive. Protect it today.",
+    smartStart: "Winter Arc reminder — start your first block.",
+    loading: "Loading...",
+    signContract: "Sign contract",
+    signed: "Signed & locked",
+    close: "Close",
+  },
+  hi: {
+    welcome: "स्वागत है",
+    day: "दिन",
+    phase: "चरण",
+    share: "शेयर",
+    logout: "लॉग आउट",
+    study: "पढ़ाई",
+    fitness: "फिटनेस",
+    both: "दोनों",
+    badDay: "बैड डे",
+    autoPhase: "ऑटो चरण",
+    recovery: "रिकवरी मोड: कल मिस। आज न्यूनतम टास्क।",
+    nonNeg: "ज़रूरी नियम",
+    contract: "मेरा अनुबंध",
+    milestones: "मीलस्टोन",
+    resetArc: "नया 90-दिन आर्क",
+    language: "भाषा",
+    theme: "थीम",
+    tourNext: "आगे",
+    tourSkip: "टूर छोड़ें",
+    eveningReview: "शाम की समीक्षा: आज क्या अच्छा रहा?",
+    smartMiss: "कल चूक गए। आज न्यूनतम टास्क।",
+    smartStreak: "स्ट्रीक ज़िंदा है। आज बचाओ।",
+    smartStart: "विंटर आर्क — पहला ब्लॉक शुरू करो।",
+    loading: "लोड हो रहा है...",
+    signContract: "अनुबंध पर हस्ताक्षर",
+    signed: "हस्ताक्षरित",
+    close: "बंद",
+  },
+} as const;
+
+type I18nKey = keyof typeof i18n.en;
+function tr(lang: Lang, key: I18nKey) {
+  return i18n[lang][key];
+}
 
 function getStreak(completedData: CompletedData, minTasks = 1): number {
   let streak = 0;
@@ -105,9 +173,14 @@ function speakDone(title: string) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(`Done. ${title}`);
     u.lang = "en-IN";
-    u.rate = 1;
     window.speechSynthesis.speak(u);
   } catch {}
+}
+
+function smartBody(lang: Lang, streak: number, missed: boolean): string {
+  if (missed) return tr(lang, "smartMiss");
+  if (streak >= 3) return tr(lang, "smartStreak");
+  return tr(lang, "smartStart");
 }
 
 function Heatmap({ dates, scores }: { dates: string[]; scores: number[] }) {
@@ -174,7 +247,7 @@ function Pomodoro() {
             setRunning(false);
             setSeconds(mode === "focus" ? 25 * 60 : 5 * 60);
           }}
-          className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm"
+          className="px-4 py-2 rounded-xl border text-sm"
         >
           Reset
         </button>
@@ -198,12 +271,10 @@ export default function Home() {
   const [darkMode, setDarkMode] = useState(false);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [reminderTime, setReminderTime] = useState("06:00");
   const [customTasks, setCustomTasks] = useState<CustomTask[]>([]);
   const [customInput, setCustomInput] = useState("");
   const [showConfetti, setShowConfetti] = useState(false);
   const [quoteIndex, setQuoteIndex] = useState(0);
-
   const [startDate, setStartDate] = useState("");
   const [mood, setMood] = useState<Record<string, Mood>>({});
   const [water, setWater] = useState<Record<string, number>>({});
@@ -217,12 +288,28 @@ export default function Home() {
   const [autoPhase, setAutoPhase] = useState(true);
   const [weeklyGoal, setWeeklyGoal] = useState(80);
   const [accent, setAccent] = useState("indigo");
-
   const [today, setToday] = useState("");
 
+  // UX + challenge
+  const [lang, setLang] = useState<Lang>("en");
+  const [themeSkin, setThemeSkin] = useState<Skin>("midnight");
+  const [tourStep, setTourStep] = useState(-1);
+  const [contractSigned, setContractSigned] = useState(false);
+  const [contractText, setContractText] = useState(
+    "I will show up for 90 days. Bad days = minimum. No zero days."
+  );
+  const [nonNeg, setNonNeg] = useState<string[]>([
+    "Wake up on time",
+    "No junk scroll before deep work",
+    "Sleep by 10:30 PM",
+  ]);
+  const [nonNegInput, setNonNegInput] = useState("");
+  const [showMilestones, setShowMilestones] = useState(false);
+  const [eveningPrompt, setEveningPrompt] = useState(false);
+
   useEffect(() => {
-    const t = new Date().toISOString().split("T")[0];
-    setToday(t);
+    const tdate = new Date().toISOString().split("T")[0];
+    setToday(tdate);
     setQuoteIndex(new Date().getDate() % QUOTES.length);
 
     const savedUser = localStorage.getItem("winter-arc-user");
@@ -231,9 +318,6 @@ export default function Home() {
       setStep("app");
     } else {
       setStep("intro");
-      const introTimer = setTimeout(() => setStep("login"), 2200);
-      // cleanup via mounted path — store timer
-      (window as any).__winterIntroTimer = introTimer;
     }
 
     const load = (key: string, setter: (v: any) => void) => {
@@ -253,18 +337,17 @@ export default function Home() {
     load("winter-arc-notes", setTaskNotes);
     load("winter-arc-formulas", setFormulas);
     load("winter-arc-friends", setFriends);
+    load("winter-arc-nonneg", setNonNeg);
 
     const theme = localStorage.getItem("winter-arc-theme");
     if (theme === "dark") {
       setDarkMode(true);
       document.documentElement.classList.add("dark");
     }
-    const rem = localStorage.getItem("winter-arc-reminder");
-    if (rem) setReminderTime(rem);
 
     let start = localStorage.getItem("winter-arc-start");
     if (!start) {
-      start = t;
+      start = tdate;
       localStorage.setItem("winter-arc-start", start);
     }
     setStartDate(start);
@@ -279,17 +362,19 @@ export default function Home() {
     const goal = localStorage.getItem("winter-arc-weekly-goal");
     if (goal) setWeeklyGoal(Number(goal));
 
-    if (typeof Notification !== "undefined") {
-      setNotifPermission(Notification.permission);
-    }
+    const savedLang = localStorage.getItem("winter-arc-lang");
+    if (savedLang === "hi" || savedLang === "en") setLang(savedLang);
+
+    const skin = localStorage.getItem("winter-arc-skin") as Skin | null;
+    if (skin) setThemeSkin(skin);
+
+    if (localStorage.getItem("winter-arc-contract") === "1") setContractSigned(true);
+    const ct = localStorage.getItem("winter-arc-contract-text");
+    if (ct) setContractText(ct);
+
+    if (typeof Notification !== "undefined") setNotifPermission(Notification.permission);
 
     setMounted(true);
-
-    return () => {
-      if ((window as any).__winterIntroTimer) {
-        clearTimeout((window as any).__winterIntroTimer);
-      }
-    };
   }, []);
 
   useEffect(() => {
@@ -301,58 +386,44 @@ export default function Home() {
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
-  // Intro → login only when not logged in
   useEffect(() => {
-    if (!mounted || step !== "intro") return;
-    if (user) return;
+    if (!mounted || step !== "intro" || user) return;
     const timer = setTimeout(() => setStep("login"), 2200);
     return () => clearTimeout(timer);
   }, [mounted, step, user]);
 
   useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("winter-arc-data", JSON.stringify(completedData));
-  }, [completedData, mounted]);
-  useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("winter-arc-plan", JSON.stringify(planData));
-  }, [planData, mounted]);
-  useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("winter-arc-custom", JSON.stringify(customTasks));
-  }, [customTasks, mounted]);
-  useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("winter-arc-mood", JSON.stringify(mood));
-  }, [mood, mounted]);
-  useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("winter-arc-water", JSON.stringify(water));
-  }, [water, mounted]);
-  useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("winter-arc-sleep", JSON.stringify(sleep));
-  }, [sleep, mounted]);
-  useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("winter-arc-notes", JSON.stringify(taskNotes));
-  }, [taskNotes, mounted]);
-  useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("winter-arc-formulas", JSON.stringify(formulas));
-  }, [formulas, mounted]);
-  useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("winter-arc-friends", JSON.stringify(friends));
-  }, [friends, mounted]);
-  useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("winter-arc-reminder", reminderTime);
-  }, [reminderTime, mounted]);
+    if (!mounted || step !== "app") return;
+    if (!localStorage.getItem("winter-arc-tour-done")) setTourStep(0);
+  }, [mounted, step]);
+
+  const persist = (key: string, value: unknown, ready: boolean) => {
+    if (!ready) return;
+    localStorage.setItem(key, JSON.stringify(value));
+  };
+
+  useEffect(() => persist("winter-arc-data", completedData, mounted), [completedData, mounted]);
+  useEffect(() => persist("winter-arc-plan", planData, mounted), [planData, mounted]);
+  useEffect(() => persist("winter-arc-custom", customTasks, mounted), [customTasks, mounted]);
+  useEffect(() => persist("winter-arc-mood", mood, mounted), [mood, mounted]);
+  useEffect(() => persist("winter-arc-water", water, mounted), [water, mounted]);
+  useEffect(() => persist("winter-arc-sleep", sleep, mounted), [sleep, mounted]);
+  useEffect(() => persist("winter-arc-notes", taskNotes, mounted), [taskNotes, mounted]);
+  useEffect(() => persist("winter-arc-formulas", formulas, mounted), [formulas, mounted]);
+  useEffect(() => persist("winter-arc-friends", friends, mounted), [friends, mounted]);
+  useEffect(() => persist("winter-arc-nonneg", nonNeg, mounted), [nonNeg, mounted]);
   useEffect(() => {
     if (!mounted) return;
     localStorage.setItem("winter-arc-weekly-goal", String(weeklyGoal));
   }, [weeklyGoal, mounted]);
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem("winter-arc-lang", lang);
+  }, [lang, mounted]);
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem("winter-arc-skin", themeSkin);
+  }, [themeSkin, mounted]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -391,10 +462,41 @@ export default function Home() {
   }, [today]);
 
   const missedYesterday =
-    !!yesterday &&
-    !!startDate &&
-    startDate < today &&
-    (completedData[yesterday] || []).length === 0;
+    !!yesterday && !!startDate && startDate < today && (completedData[yesterday] || []).length === 0;
+
+  const streakEarly = getStreak(completedData);
+
+  // Smart daily reminder + evening review
+  useEffect(() => {
+    if (!mounted || step !== "app") return;
+    const id = setInterval(() => {
+      const now = new Date();
+      const h = now.getHours();
+      // evening 20-22
+      if (h >= 20 && h <= 22) {
+        const key = `evening-${today}`;
+        if (!sessionStorage.getItem(key)) {
+          setEveningPrompt(true);
+          if (notifPermission === "granted") {
+            new Notification("Winter Arc", { body: tr(lang, "eveningReview"), icon: "/icon-192.png" });
+          }
+          sessionStorage.setItem(key, "1");
+        }
+      }
+      // morning-ish smart ping once per day when app open around 6-9
+      if (h >= 6 && h <= 9) {
+        const key = `morning-${today}`;
+        if (!sessionStorage.getItem(key) && notifPermission === "granted") {
+          new Notification("Winter Arc", {
+            body: smartBody(lang, streakEarly, missedYesterday),
+            icon: "/icon-192.png",
+          });
+          sessionStorage.setItem(key, "1");
+        }
+      }
+    }, 30000);
+    return () => clearInterval(id);
+  }, [mounted, step, today, lang, notifPermission, streakEarly, missedYesterday]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -413,7 +515,7 @@ export default function Home() {
 
   const handleInstall = async () => {
     if (!deferredPrompt) {
-      alert("PWA install nahi mila.\nAndroid: APK use karo\niPhone: Share → Add to Home Screen");
+      alert("PWA install nahi mila.\nAndroid: APK\niPhone: Share → Add to Home Screen");
       return;
     }
     deferredPrompt.prompt();
@@ -433,7 +535,7 @@ export default function Home() {
       if (!isDone) {
         playSuccessSound();
         if (task) speakDone(task.taskTitle);
-        const note = prompt("Optional note / reflection (Cancel = skip):");
+        const note = prompt("Optional note (Cancel = skip):");
         if (note && note.trim()) {
           setTaskNotes((n) => ({ ...n, [`${today}-${id}`]: note.trim() }));
         }
@@ -517,22 +619,29 @@ export default function Home() {
     { id: "xp100", title: "100 XP", ok: xp >= 100 },
     { id: "xp500", title: "500 XP", ok: xp >= 500 },
     { id: "perfect", title: "Perfect Day", ok: Object.values(completedData).some((a) => a.length >= 5) },
-    { id: "day30", title: "Day 30 Reached", ok: dayNumber >= 30 },
+    { id: "day30", title: "Day 30", ok: dayNumber >= 30 },
     { id: "both", title: "Study + Fitness", ok: studyDone > 0 && fitnessDone > 0 },
   ];
 
+  const milestones = [
+    { day: 7, title: "Week 1 Locked", desc: "7 days of showing up" },
+    { day: 21, title: "Habit Forming", desc: "3 weeks deep" },
+    { day: 45, title: "Halfway Fire", desc: "Past the middle" },
+    { day: 90, title: "Arc Complete", desc: "Full Winter Arc" },
+  ];
+
   const shareCard = async () => {
-    const text = `❄️ Winter Arc — Day ${dayNumber}/90\n🔥 Streak: ${streak}\n⚡ XP: ${xp} · Level ${level} (${rank})\n📊 Today: ${progress}% · Week: ${weeklyProgress}%\nCode: ${myCode}\n#WinterArc`;
+    const text = `❄️ Winter Arc — Day ${dayNumber}/90\n🔥 Streak: ${streak}\n⚡ XP: ${xp} · L${level} (${rank})\n📊 Today ${progress}% · Week ${weeklyProgress}%\n#WinterArc`;
     try {
       if (navigator.share) await navigator.share({ title: "Winter Arc", text });
       else {
         await navigator.clipboard.writeText(text);
-        alert("Progress card copy ho gaya!\n\n" + text);
+        alert(text);
       }
     } catch {
       try {
         await navigator.clipboard.writeText(text);
-        alert("Clipboard pe copy:\n\n" + text);
+        alert(text);
       } catch {
         alert(text);
       }
@@ -542,7 +651,7 @@ export default function Home() {
   const exportMyCard = () => {
     const payload = JSON.stringify({ code: myCode, name: user?.name || "Warrior", xp, streak });
     navigator.clipboard.writeText(payload);
-    alert("Partner card clipboard pe copy. Friend ko bhejo.");
+    alert("Card copied.");
   };
 
   const importFriend = () => {
@@ -554,9 +663,8 @@ export default function Home() {
         return [...rest, { code: data.code, name: data.name, xp: data.xp || 0, streak: data.streak || 0 }];
       });
       setFriendCodeInput("");
-      alert("Friend add ho gaya!");
     } catch {
-      alert("Galat format. Friend ka Export card paste karo.");
+      alert("Invalid friend card JSON.");
     }
   };
 
@@ -564,6 +672,22 @@ export default function Home() {
     { code: myCode, name: user?.name || "You", xp, streak },
     ...friends,
   ].sort((a, b) => b.xp - a.xp);
+
+  const signContract = () => {
+    setContractSigned(true);
+    localStorage.setItem("winter-arc-contract", "1");
+    localStorage.setItem("winter-arc-contract-text", contractText);
+  };
+
+  const resetArc = () => {
+    if (!confirm("Start a new 90-day Arc? Start date will reset to today.")) return;
+    const t0 = new Date().toISOString().split("T")[0];
+    localStorage.setItem("winter-arc-start", t0);
+    setStartDate(t0);
+    localStorage.removeItem("winter-arc-contract");
+    setContractSigned(false);
+    alert("New Arc — Day 1");
+  };
 
   const btnAccent =
     accent === "rose"
@@ -574,24 +698,26 @@ export default function Home() {
           ? "from-emerald-600 to-teal-600"
           : "from-indigo-600 to-violet-600";
 
+  const skinBg =
+    themeSkin === "forest"
+      ? "from-emerald-50 to-green-100/40 dark:from-slate-950 dark:to-emerald-950/30"
+      : themeSkin === "sunset"
+        ? "from-orange-50 to-rose-100/40 dark:from-slate-950 dark:to-rose-950/30"
+        : themeSkin === "ocean"
+          ? "from-sky-50 to-cyan-100/40 dark:from-slate-950 dark:to-cyan-950/30"
+          : "from-slate-50 to-indigo-50/30 dark:from-slate-950 dark:to-indigo-950/20";
+
   const quote = QUOTES[quoteIndex] || QUOTES[0];
 
-  // ——— Hydration-safe loading (server + first client paint same) ———
   if (!mounted) {
     return (
-      <main
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: "#0B0F19" }}
-      >
+      <main className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#0B0F19" }}>
         <div className="text-center px-6">
           <p className="text-indigo-300 text-xs tracking-[0.2em] uppercase mb-6">90-Day Challenge</p>
           <h1 className="text-5xl font-bold text-white mb-4">
-            Winter{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">
-              Arc
-            </span>
+            Winter <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">Arc</span>
           </h1>
-          <p className="text-slate-500 text-sm">Loading...</p>
+          <p className="text-slate-500 text-sm">{tr("en", "loading")}</p>
         </div>
       </main>
     );
@@ -599,17 +725,11 @@ export default function Home() {
 
   if (step === "intro") {
     return (
-      <main
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: "#0B0F19" }}
-      >
+      <main className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#0B0F19" }}>
         <div className="text-center px-6">
           <p className="text-indigo-300 text-xs tracking-[0.2em] uppercase mb-6">90-Day Challenge</p>
           <h1 className="text-5xl sm:text-7xl font-bold text-white mb-4">
-            Winter{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">
-              Arc
-            </span>
+            Winter <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">Arc</span>
           </h1>
           <p className="text-slate-400">Discipline. Deep Work. Mastery.</p>
         </div>
@@ -620,31 +740,13 @@ export default function Home() {
   if (step === "login") {
     return (
       <main className="min-h-screen flex items-center justify-center bg-[#0B0F19] px-4">
-        <form
-          onSubmit={handleLogin}
-          className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 space-y-4"
-        >
+        <form onSubmit={handleLogin} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 space-y-4">
           <h1 className="text-3xl font-bold text-white text-center mb-2">
             Winter <span className="text-indigo-400">Arc</span>
           </h1>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Name"
-            className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white"
-            required
-          />
-          <input
-            value={contact}
-            onChange={(e) => setContact(e.target.value)}
-            placeholder="Email or Phone"
-            className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white"
-            required
-          />
-          <button
-            type="submit"
-            className={`w-full py-3 rounded-xl bg-gradient-to-r ${btnAccent} text-white font-medium`}
-          >
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white" required />
+          <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Email or Phone" className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white" required />
+          <button type="submit" className={`w-full py-3 rounded-xl bg-gradient-to-r ${btnAccent} text-white font-medium`}>
             Enter Winter Arc
           </button>
         </form>
@@ -652,9 +754,8 @@ export default function Home() {
     );
   }
 
-  // ——— MAIN APP ———
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-indigo-50/30 dark:from-slate-950 dark:to-indigo-950/20">
+    <main className={`min-h-screen bg-gradient-to-b ${skinBg}`}>
       {showConfetti && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/25 pointer-events-none">
           <p className="text-5xl animate-bounce">🎉</p>
@@ -662,23 +763,85 @@ export default function Home() {
         </div>
       )}
 
+      {tourStep >= 0 && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-sm w-full shadow-xl border">
+            <p className="text-sm text-slate-500 mb-1">Tour {tourStep + 1}/4</p>
+            <p className="font-semibold mb-4 text-slate-900 dark:text-white">
+              {tourStep === 0 && "Track Day 1–90 at the top. Auto Phase follows your journey."}
+              {tourStep === 1 && "Complete tasks for XP, streak, sound & voice feedback."}
+              {tourStep === 2 && "Use Planning, Pomodoro, Non-negotiables daily."}
+              {tourStep === 3 && "Sign your contract, share progress, hit milestones."}
+            </p>
+            <div className="flex gap-2">
+              <button
+                className="flex-1 py-2 rounded-xl border text-sm"
+                onClick={() => {
+                  localStorage.setItem("winter-arc-tour-done", "1");
+                  setTourStep(-1);
+                }}
+              >
+                {tr(lang, "tourSkip")}
+              </button>
+              <button
+                className="flex-1 py-2 rounded-xl bg-indigo-600 text-white text-sm"
+                onClick={() => {
+                  if (tourStep >= 3) {
+                    localStorage.setItem("winter-arc-tour-done", "1");
+                    setTourStep(-1);
+                  } else setTourStep((s) => s + 1);
+                }}
+              >
+                {tr(lang, "tourNext")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMilestones && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowMilestones(false)}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full border" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-4">{tr(lang, "milestones")}</h3>
+            <div className="space-y-2">
+              {milestones.map((m) => (
+                <div key={m.day} className={`p-3 rounded-xl border text-sm ${dayNumber >= m.day ? "bg-emerald-50 border-emerald-300 dark:bg-emerald-950/40" : "opacity-50"}`}>
+                  Day {m.day}: <b>{m.title}</b> — {m.desc} {dayNumber >= m.day ? "✅" : "🔒"}
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setShowMilestones(false)} className="mt-4 w-full py-2 rounded-xl border text-sm">
+              {tr(lang, "close")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {eveningPrompt && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 max-w-md mx-auto bg-indigo-600 text-white rounded-2xl p-4 shadow-xl">
+          <p className="text-sm mb-2">{tr(lang, "eveningReview")}</p>
+          <button onClick={() => setEveningPrompt(false)} className="text-xs underline">
+            {tr(lang, "close")}
+          </button>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex flex-col sm:flex-row sm:justify-between gap-4 mb-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 mb-1">
-              Day {dayNumber} / 90 · {suggestedPhase} Phase · {rank}
+              {tr(lang, "day")} {dayNumber} / 90 · {suggestedPhase} {tr(lang, "phase")} · {rank}
             </p>
             <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-              Winter{" "}
-              <span className={`text-transparent bg-clip-text bg-gradient-to-r ${btnAccent}`}>
-                Arc
-              </span>
+              Winter <span className={`text-transparent bg-clip-text bg-gradient-to-r ${btnAccent}`}>Arc</span>
             </h1>
-            <p className="text-sm text-slate-500">Welcome, {user?.name.split(" ")[0]}</p>
+            <p className="text-sm text-slate-500">
+              {tr(lang, "welcome")}, {user?.name.split(" ")[0]}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={shareCard} className="px-3 py-2 rounded-xl bg-sky-600 text-white text-sm">
-              📤 Share
+              📤 {tr(lang, "share")}
             </button>
             <a href="/winter-arc.apk" download className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm">
               ⬇️ APK
@@ -690,14 +853,46 @@ export default function Home() {
               {darkMode ? "☀️" : "🌙"}
             </button>
             <button onClick={handleLogout} className="px-3 py-2 rounded-xl border border-rose-300 text-rose-600 text-sm">
-              Logout
+              {tr(lang, "logout")}
             </button>
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-2 mb-4">
+          <select value={lang} onChange={(e) => setLang(e.target.value as Lang)} className="px-3 py-2 rounded-xl border text-sm bg-white dark:bg-slate-900">
+            <option value="en">English</option>
+            <option value="hi">हिंदी</option>
+          </select>
+          <select value={themeSkin} onChange={(e) => setThemeSkin(e.target.value as Skin)} className="px-3 py-2 rounded-xl border text-sm bg-white dark:bg-slate-900">
+            <option value="midnight">Midnight</option>
+            <option value="forest">Forest</option>
+            <option value="sunset">Sunset</option>
+            <option value="ocean">Ocean</option>
+          </select>
+          <button onClick={() => setShowMilestones(true)} className="px-3 py-2 rounded-xl border text-sm">
+            🏁 {tr(lang, "milestones")}
+          </button>
+          <button onClick={resetArc} className="px-3 py-2 rounded-xl border border-rose-300 text-rose-600 text-sm">
+            {tr(lang, "resetArc")}
+          </button>
+          <button
+            onClick={async () => {
+              if (typeof Notification === "undefined") return;
+              const p = await Notification.requestPermission();
+              setNotifPermission(p);
+              if (p === "granted") {
+                new Notification("Winter Arc", { body: smartBody(lang, streak, missedYesterday), icon: "/icon-192.png" });
+              }
+            }}
+            className="px-3 py-2 rounded-xl border text-sm"
+          >
+            🔔 Notify
+          </button>
+        </div>
+
         {missedYesterday && (
           <div className="mb-4 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 text-sm text-amber-800 dark:text-amber-200">
-            🛡️ <b>Recovery mode:</b> Kal miss hua. Aaj Bad Day minimum tasks.
+            🛡️ {tr(lang, "recovery")}
           </div>
         )}
 
@@ -705,22 +900,64 @@ export default function Home() {
           <p className="text-sm italic text-indigo-800 dark:text-indigo-200">&ldquo;{quote}&rdquo;</p>
         </div>
 
+        {/* Non-negotiables */}
+        <div className="mb-4 bg-white dark:bg-slate-900 rounded-2xl p-4 border">
+          <h3 className="font-semibold mb-2">📌 {tr(lang, "nonNeg")}</h3>
+          <ul className="text-sm space-y-1 mb-2">
+            {nonNeg.map((n, i) => (
+              <li key={i} className="flex justify-between">
+                <span>• {n}</span>
+                <button className="text-rose-500" onClick={() => setNonNeg((x) => x.filter((_, j) => j !== i))}>
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <input value={nonNegInput} onChange={(e) => setNonNegInput(e.target.value)} className="flex-1 px-3 py-2 rounded-xl border text-sm" placeholder="Add rule..." />
+            <button
+              onClick={() => {
+                if (!nonNegInput.trim()) return;
+                setNonNeg((x) => [...x, nonNegInput.trim()]);
+                setNonNegInput("");
+              }}
+              className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+
+        {/* Contract */}
+        <div className="mb-4 bg-white dark:bg-slate-900 rounded-2xl p-4 border">
+          <h3 className="font-semibold mb-2">✍️ {tr(lang, "contract")}</h3>
+          <textarea
+            value={contractText}
+            onChange={(e) => setContractText(e.target.value)}
+            disabled={contractSigned}
+            className="w-full px-3 py-2 rounded-xl border text-sm mb-2 bg-slate-50 dark:bg-slate-800 min-h-[80px]"
+          />
+          {contractSigned ? (
+            <p className="text-emerald-600 text-sm font-medium">✅ {tr(lang, "signed")}</p>
+          ) : (
+            <button onClick={signContract} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm">
+              {tr(lang, "signContract")}
+            </button>
+          )}
+        </div>
+
         <div className="grid sm:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border">
             <p className="text-sm font-semibold mb-2">😊 Mood</p>
             <div className="flex gap-2">
               {(["great", "ok", "low"] as Mood[]).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMood((x) => ({ ...x, [today]: m }))}
-                  className={`px-3 py-1.5 rounded-lg text-sm ${mood[today] === m ? "bg-indigo-600 text-white" : "bg-slate-100 dark:bg-slate-800"}`}
-                >
+                <button key={m} onClick={() => setMood((x) => ({ ...x, [today]: m }))} className={`px-3 py-1.5 rounded-lg text-sm ${mood[today] === m ? "bg-indigo-600 text-white" : "bg-slate-100 dark:bg-slate-800"}`}>
                   {m === "great" ? "😄" : m === "ok" ? "😐" : "😓"}
                 </button>
               ))}
             </div>
           </div>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border">
             <p className="text-sm font-semibold mb-2">💧 Water</p>
             <div className="flex items-center gap-3">
               <button onClick={() => setWater((w) => ({ ...w, [today]: Math.max(0, (w[today] || 0) - 1) }))} className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800">−</button>
@@ -728,42 +965,23 @@ export default function Home() {
               <button onClick={() => setWater((w) => ({ ...w, [today]: (w[today] || 0) + 1 }))} className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800">+</button>
             </div>
           </div>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800">
-            <p className="text-sm font-semibold mb-2">😴 Sleep (hrs)</p>
-            <input
-              type="number"
-              min={0}
-              max={14}
-              step={0.5}
-              value={sleep[today] ?? ""}
-              onChange={(e) => setSleep((s) => ({ ...s, [today]: Number(e.target.value) }))}
-              className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-sm"
-              placeholder="7.5"
-            />
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border">
+            <p className="text-sm font-semibold mb-2">😴 Sleep</p>
+            <input type="number" min={0} max={14} step={0.5} value={sleep[today] ?? ""} onChange={(e) => setSleep((s) => ({ ...s, [today]: Number(e.target.value) }))} className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-sm" placeholder="7.5" />
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-4">
           {(["Study", "Fitness", "Both"] as FocusType[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFocus(f)}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold ${focus === f ? `bg-gradient-to-r ${btnAccent} text-white` : "border bg-white dark:bg-slate-900"}`}
-            >
-              {f}
+            <button key={f} onClick={() => setFocus(f)} className={`px-4 py-2 rounded-xl text-sm font-semibold ${focus === f ? `bg-gradient-to-r ${btnAccent} text-white` : "border bg-white dark:bg-slate-900"}`}>
+              {f === "Study" ? tr(lang, "study") : f === "Fitness" ? tr(lang, "fitness") : tr(lang, "both")}
             </button>
           ))}
-          <button
-            onClick={() => setAutoPhase(!autoPhase)}
-            className={`px-4 py-2 rounded-xl text-sm ${autoPhase ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "border"}`}
-          >
-            Auto Phase: {autoPhase ? "ON" : "OFF"}
+          <button onClick={() => setAutoPhase(!autoPhase)} className={`px-4 py-2 rounded-xl text-sm ${autoPhase ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "border"}`}>
+            {tr(lang, "autoPhase")}: {autoPhase ? "ON" : "OFF"}
           </button>
-          <button
-            onClick={() => setBadDayMode(!badDayMode)}
-            className={`px-4 py-2 rounded-xl text-sm ${badDayMode ? "bg-rose-600 text-white" : "border"}`}
-          >
-            Bad Day
+          <button onClick={() => setBadDayMode(!badDayMode)} className={`px-4 py-2 rounded-xl text-sm ${badDayMode ? "bg-rose-600 text-white" : "border"}`}>
+            {tr(lang, "badDay")}
           </button>
         </div>
 
@@ -771,13 +989,7 @@ export default function Home() {
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border"><p className="text-xs text-slate-500">Streak</p><p className="text-2xl font-bold text-orange-500">🔥 {streak}</p></div>
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border"><p className="text-xs text-slate-500">XP</p><p className="text-2xl font-bold text-indigo-600">{xp}</p></div>
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border"><p className="text-xs text-slate-500">Level</p><p className="text-2xl font-bold">{level}</p></div>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border"><p className="text-xs text-slate-500">Week goal {weeklyGoal}%</p><p className={`text-2xl font-bold ${weeklyProgress >= weeklyGoal ? "text-emerald-600" : "text-amber-600"}`}>{weeklyProgress}%</p></div>
-        </div>
-
-        <div className="mb-4 flex items-center gap-2 text-sm">
-          <span className="text-slate-500">Weekly goal:</span>
-          <input type="number" min={50} max={100} value={weeklyGoal} onChange={(e) => setWeeklyGoal(Number(e.target.value))} className="w-20 px-2 py-1 rounded-lg border bg-white dark:bg-slate-900" />
-          <span className="text-slate-400">%</span>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border"><p className="text-xs text-slate-500">Week {weeklyGoal}%</p><p className={`text-2xl font-bold ${weeklyProgress >= weeklyGoal ? "text-emerald-600" : "text-amber-600"}`}>{weeklyProgress}%</p></div>
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-6">
@@ -788,7 +1000,7 @@ export default function Home() {
 
         <div className="mb-6 bg-white dark:bg-slate-900 rounded-2xl p-4 border">
           <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5">
-            <div className={`h-full rounded-full bg-gradient-to-r ${btnAccent} transition-all`} style={{ width: `${progress}%` }} />
+            <div className={`h-full rounded-full bg-gradient-to-r ${btnAccent}`} style={{ width: `${progress}%` }} />
           </div>
         </div>
 
@@ -812,56 +1024,49 @@ export default function Home() {
         </div>
 
         <div className="mb-6 bg-white dark:bg-slate-900 rounded-2xl p-5 border">
-          <h3 className="font-semibold mb-2">👥 Accountability</h3>
-          <p className="text-xs text-slate-500 mb-3">Code: <b>{myCode}</b></p>
+          <h3 className="font-semibold mb-2">👥 Accountability · {myCode}</h3>
           <div className="flex flex-wrap gap-2 mb-3">
-            <button onClick={exportMyCard} className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm">Export my card</button>
-            <input value={friendCodeInput} onChange={(e) => setFriendCodeInput(e.target.value)} placeholder="Friend JSON paste..." className="flex-1 min-w-[200px] px-3 py-2 rounded-xl border text-sm bg-slate-50 dark:bg-slate-800" />
-            <button onClick={importFriend} className="px-3 py-2 rounded-xl border text-sm">Import friend</button>
+            <button onClick={exportMyCard} className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm">Export card</button>
+            <input value={friendCodeInput} onChange={(e) => setFriendCodeInput(e.target.value)} placeholder="Friend JSON..." className="flex-1 min-w-[180px] px-3 py-2 rounded-xl border text-sm" />
+            <button onClick={importFriend} className="px-3 py-2 rounded-xl border text-sm">Import</button>
           </div>
-          <div className="space-y-2">
-            {leaderboard.map((p, i) => (
-              <div key={p.code + i} className="flex justify-between text-sm px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800">
-                <span>#{i + 1} {p.name} {p.code === myCode ? "(You)" : ""}</span>
-                <span className="font-semibold">{p.xp} XP · 🔥{p.streak}</span>
-              </div>
-            ))}
-          </div>
+          {leaderboard.map((p, i) => (
+            <div key={p.code + i} className="flex justify-between text-sm px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 mb-1">
+              <span>#{i + 1} {p.name}{p.code === myCode ? " (You)" : ""}</span>
+              <span className="font-semibold">{p.xp} XP · 🔥{p.streak}</span>
+            </div>
+          ))}
         </div>
 
         <div className="mb-6 bg-white dark:bg-slate-900 rounded-2xl p-5 border">
           <h3 className="font-semibold mb-2">📘 Formula locker</h3>
           <div className="flex gap-2 mb-3">
-            <input value={formulaInput} onChange={(e) => setFormulaInput(e.target.value)} placeholder="Formula / note..." className="flex-1 px-3 py-2 rounded-xl border text-sm bg-slate-50 dark:bg-slate-800" />
+            <input value={formulaInput} onChange={(e) => setFormulaInput(e.target.value)} className="flex-1 px-3 py-2 rounded-xl border text-sm" placeholder="Formula..." />
             <button onClick={() => { if (!formulaInput.trim()) return; setFormulas((f) => [...f, formulaInput.trim()]); setFormulaInput(""); }} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm">Save</button>
           </div>
-          <ul className="space-y-1 text-sm">
-            {formulas.map((f, i) => (
-              <li key={i} className="flex justify-between px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800">
-                <span>{f}</span>
-                <button className="text-rose-500" onClick={() => setFormulas((x) => x.filter((_, j) => j !== i))}>×</button>
-              </li>
-            ))}
-          </ul>
+          {formulas.map((f, i) => (
+            <div key={i} className="flex justify-between text-sm px-2 py-1">
+              {f}
+              <button className="text-rose-500" onClick={() => setFormulas((x) => x.filter((_, j) => j !== i))}>×</button>
+            </div>
+          ))}
         </div>
 
         <div className="mb-6 bg-white dark:bg-slate-900 rounded-2xl p-5 border">
-          <h3 className="font-semibold mb-2">📝 Daily Planning</h3>
+          <h3 className="font-semibold mb-2">📝 Planning</h3>
           <div className="flex gap-2 mb-3">
-            <input value={planInput} onChange={(e) => setPlanInput(e.target.value)} className="flex-1 px-3 py-2 rounded-xl border text-sm" placeholder="Plan..." />
+            <input value={planInput} onChange={(e) => setPlanInput(e.target.value)} className="flex-1 px-3 py-2 rounded-xl border text-sm" />
             <button onClick={() => { if (!planInput.trim() || !today) return; setPlanData((p) => ({ ...p, [today]: [...(p[today] || []), planInput.trim()] })); setPlanInput(""); }} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm">Add</button>
           </div>
-          <ul className="text-sm space-y-1 mb-4">
-            {todayPlan.map((item, i) => (
-              <li key={i} className="flex justify-between px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded">
-                {item}
-                <button className="text-rose-500" onClick={() => setPlanData((p) => ({ ...p, [today]: (p[today] || []).filter((_, j) => j !== i) }))}>×</button>
-              </li>
-            ))}
-          </ul>
-          <h3 className="font-semibold mb-2">✨ Custom tasks</h3>
+          {todayPlan.map((item, i) => (
+            <div key={i} className="flex justify-between text-sm px-2 py-1">
+              {item}
+              <button className="text-rose-500" onClick={() => setPlanData((p) => ({ ...p, [today]: (p[today] || []).filter((_, j) => j !== i) }))}>×</button>
+            </div>
+          ))}
+          <h3 className="font-semibold mb-2 mt-4">✨ Custom</h3>
           <div className="flex gap-2 mb-2">
-            <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} className="flex-1 px-3 py-2 rounded-xl border text-sm" placeholder="Custom task" />
+            <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} className="flex-1 px-3 py-2 rounded-xl border text-sm" />
             <button onClick={() => { if (!customInput.trim()) return; setCustomTasks((c) => [...c, { id: Date.now(), title: customInput.trim() }]); setCustomInput(""); }} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm">Add</button>
           </div>
           {customTasks.map((t) => (
@@ -872,20 +1077,15 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-4">
           {(["All", "Control", "Capacity", "Proof"] as FilterType[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => {
-                setAutoPhase(false);
-                setFilter(f);
-              }}
-              className={`px-4 py-2 rounded-xl text-sm ${filter === f ? `bg-gradient-to-r ${btnAccent} text-white` : "border bg-white dark:bg-slate-900"}`}
-            >
+            <button key={f} onClick={() => { setAutoPhase(false); setFilter(f); }} className={`px-4 py-2 rounded-xl text-sm ${filter === f ? `bg-gradient-to-r ${btnAccent} text-white` : "border bg-white dark:bg-slate-900"}`}>
               {f}
             </button>
           ))}
         </div>
+
+        <p className="text-xs text-slate-400 mb-2 sm:hidden">Tip: Tap task card to complete</p>
 
         <div className="grid gap-4 sm:grid-cols-2">
           {filteredTasks.map((task) => (
@@ -897,9 +1097,7 @@ export default function Home() {
             </div>
           ))}
         </div>
-        {filteredTasks.length === 0 && (
-          <p className="text-center text-slate-400 py-12">No tasks for this filter.</p>
-        )}
+        {filteredTasks.length === 0 && <p className="text-center text-slate-400 py-12">No tasks.</p>}
       </div>
     </main>
   );
